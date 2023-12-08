@@ -7,13 +7,11 @@ from discord.ext import commands, tasks
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
-
 @bot.event
 async def on_ready():
     os.system('cls' if os.name == 'nt' else 'clear')
     print(f'Logged in as {bot.user.name}')
     check_presence.start()
-
 
 @bot.command()
 async def hello(ctx):
@@ -21,7 +19,6 @@ async def hello(ctx):
 
 users = [454920881177624576]
 Presencedata = {}
-
 
 async def getActivity(member):
     activities = []
