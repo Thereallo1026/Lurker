@@ -80,7 +80,6 @@ async def check_presence():
                 }
                 if user_id not in Presencedata or Presencedata[user_id] != current_status:
                     Presencedata[user_id] = current_status
-                    print(f'{member.name} is {member.status} {member.activity}')
                     await channel.send(f'```json\n{json.dumps(current_status, indent=2, ensure_ascii=False)}\n```')
 
 load_dotenv()
