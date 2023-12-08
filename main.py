@@ -41,12 +41,12 @@ async def getActivity(member):
         elif isinstance(activity, discord.Spotify):
             activities.append({
                 "type": "Spotify",
-                "track_id": activity.track_id,
-                "track_name": activity.title,
+                "trackId": activity.track_id,
+                "trackName": activity.title,
                 "artist": activity.artist,
                 "album": activity.album,
-                "album_cover_url": activity.album_cover_url,
-                "playing_state": "Playing" if activity is not None else "Not Playing"
+                "albumCoverUrl": activity.album_cover_url,
+                "state": "Playing" if activity is not None else "Not Playing"
             })
         elif isinstance(activity, discord.Activity):
             activities.append({
