@@ -69,17 +69,18 @@ async def check_presence():
     channel = bot.get_channel(1141536147391127562)
     guild = bot.get_guild(1131126447340261398)
     if guild:
-        for user_id in users:
-            member = guild.get_member(user_id)
+        for userId in users:
+            member = guild.get_member(userId)
             if member:
                 current_status = {
                     "name": member.name,
+                    "id": member.id,
                     "status": str(member.status),
                     'customStatus': str(member.activity) if member.activity else None,
                     "activity": await getActivity(member),
                 }
-                if user_id not in Presencedata or Presencedata[user_id] != current_status:
-                    Presencedata[user_id] = current_status
+                if userId not in Presencedata or Presencedata[userId] != current_status:
+                    Presencedata[userId] = current_status
                     await channel.send(f'```json\n{json.dumps(current_status, indent=2, ensure_ascii=False)}\n```')
 
 load_dotenv()
