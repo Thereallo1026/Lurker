@@ -2,6 +2,7 @@ import os
 import json
 import discord
 import aiofiles
+import datetime
 
 from multiprocessing import Process
 from dotenv import load_dotenv
@@ -15,16 +16,31 @@ app.config['JSON_SORT_KEYS'] = False
 json_dir = './json/' 
 os.makedirs(json_dir, exist_ok=True)
 
+async def load_users():
+    try:
+        async with aiofiles.open('./list.json', mode='r', encoding='utf-8') as file:
+            data = await file.read()
+            return json.loads(data)
+    except Exception as e:
+        print(f"Error loading users list: {e}")
+        return []
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name}')
     check_presence.start()
 
 @bot.command()
-async def hello(ctx):
-    await ctx.send('my name is emu otori, emu is meaning smile')
+@commands.is_owner()
+async def add(ctx, user_id: int):
+    if user_id not in bot.users_list:
+        bot.users_list.append(user_id)
+        async with aiofiles.open('./list.json', 'w') as file:
+            await file.write(json.dumps(bot.users_list))
+        await ctx.send(f'User ID `{user_id}` added.')
+    else:
+        await ctx.send(f'User ID `{user_id}` is already in the list.')
 
-users = [454920881177624576, 704939945437167666]
 PresenceData = {}
 
 async def getActivity(member):
@@ -40,6 +56,8 @@ async def getActivity(member):
                 "type": "Streaming",
                 "name": activity.name,
                 "details": activity.details if activity.details else None,
+                "twitchName": activity.twitch_name if activity.twitch_name else None,
+                "url": activity.url if activity.url else None,
                 "state": activity.state if activity.state else None,
             })
         elif isinstance(activity, discord.Spotify):
@@ -58,6 +76,10 @@ async def getActivity(member):
                 "name": str(activity.name),
                 "state": activity.state if activity.state else None,
                 "details": activity.details if activity.details else None,
+                "timestamps": {
+                    "start": activity.start if activity.start else None,
+                    "end": activity.end if activity.end else None
+                },
                 "images": {
                     "large": {"text": activity.large_image_text if activity.large_image_text else None,
                               "url": activity.large_image_url if activity.large_image_url else None},
@@ -73,6 +95,9 @@ async def construct_presence_data(guild, userId):
     if not member:
         return None
 
+    def datetime_to_timestamp(dt):
+        return int(dt.timestamp()) if isinstance(dt, datetime.datetime) else None
+
     current_status = {
         "name": member.name,
         "id": member.id,
@@ -80,14 +105,24 @@ async def construct_presence_data(guild, userId):
         'customStatus': str(member.activity) if member.activity else None,
         "activity": await getActivity(member) if member.activities else None,
     }
+
+    if "activity" in current_status and current_status["activity"]:
+        for activity in current_status["activity"]:
+            if "timestamps" in activity:
+                if "start" in activity["timestamps"] and isinstance(activity["timestamps"]["start"], datetime.datetime):
+                    activity["timestamps"]["start"] = datetime_to_timestamp(activity["timestamps"]["start"])
+                if "end" in activity["timestamps"] and isinstance(activity["timestamps"]["end"], datetime.datetime):
+                    activity["timestamps"]["end"] = datetime_to_timestamp(activity["timestamps"]["end"])
+
     return current_status
 
-@tasks.loop(seconds=3)
+@tasks.loop(seconds=5)
 async def check_presence():
     channel = bot.get_channel(1141536147391127562)
     guild = bot.get_guild(1131126447340261398)
+    bot.users_list = await load_users()
     if guild:
-        for userId in users:
+        for userId in bot.users_list:
             current_status = await construct_presence_data(guild, userId)
             if current_status and (userId not in PresenceData or PresenceData[userId] != current_status):
                 PresenceData[userId] = current_status
@@ -118,7 +153,7 @@ def run_bot():
     bot.run(token)
 
 def run_flask():
-    app.run(port=1337, use_reloader=False)
+    app.run(port=1337, use_reloader=False, host="0.0.0.0")
 
 if __name__ == "__main__":
     p1 = Process(target=run_bot)
