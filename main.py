@@ -16,14 +16,13 @@ app.config['JSON_SORT_KEYS'] = False
 json_dir = './json/' 
 os.makedirs(json_dir, exist_ok=True)
 
-async def load_users():
+async def load_config():
     try:
-        async with aiofiles.open('./list.json', mode='r', encoding='utf-8') as file:
-            data = await file.read()
-            return json.loads(data)
+        async with aiofiles.open('./config.json', mode='r', encoding='utf-8') as file:
+            return json.loads(await file.read())
     except Exception as e:
-        print(f"Error loading users list: {e}")
-        return []
+        print(f"Error loading config: {e}")
+        return None
 
 @bot.event
 async def on_ready():
@@ -41,8 +40,39 @@ async def add(ctx, user_id: int):
     else:
         await ctx.send(f'User ID `{user_id}` is already in the list.')
 
-PresenceData = {}
+@bot.command()
+async def list(ctx):
+    await ctx.send(f'```json\n{json.dumps(bot.users_list, indent=4, ensure_ascii=False)}```')
 
+@bot.command()
+async def config(ctx):
+    await ctx.send(f'```json\n{json.dumps(bot.config, indent=4, ensure_ascii=False)}```')
+
+@bot.command()
+@commands.is_owner()
+async def channel(ctx, id):
+    try:
+        id = int(id)
+    except ValueError:
+        await ctx.send(f'Invalid channel ID: `{id}`')
+        return
+    try:
+        async with aiofiles.open('./config.json', 'r') as file:
+            config = json.loads(await file.read())
+    except Exception as e:
+        await ctx.send(f'Error loading configuration: {e}')
+        return
+    
+    config['channel'] = id
+    try:
+        async with aiofiles.open('./config.json', 'w') as file:
+            await file.write(json.dumps(config))
+        await ctx.send(f'Updated alerts channel to `{id}`')
+    except Exception as e:
+        await ctx.send(f'Error updating configuration: {e}')
+
+
+PresenceData = {}
 async def getActivity(member):
     activities = []
     for activity in member.activities:
@@ -118,17 +148,22 @@ async def construct_presence_data(guild, userId):
 
 @tasks.loop(seconds=5)
 async def check_presence():
-    channel = bot.get_channel(1141536147391127562)
-    guild = bot.get_guild(1131126447340261398)
-    bot.users_list = await load_users()
-    if guild:
-        for userId in bot.users_list:
-            current_status = await construct_presence_data(guild, userId)
-            if current_status and (userId not in PresenceData or PresenceData[userId] != current_status):
-                PresenceData[userId] = current_status
-                async with aiofiles.open(os.path.join(json_dir, f'{userId}.json'), mode='w', encoding='utf-8') as file:
-                    await file.write(json.dumps(current_status, ensure_ascii=False))
-                await channel.send(f'Updated `{userId}` ```json\n{json.dumps(current_status, indent=4, ensure_ascii=False)}```')
+    bot.config = await load_config()
+    if bot.config:
+        bot.users_list = bot.config.get("list", [])
+        bot.channel_id = bot.config.get("channel")
+        bot.send_alerts = bot.config.get("alerts", False)
+        channel = bot.get_channel(bot.channel_id)
+        guild = bot.get_guild(1131126447340261398)
+        if guild and channel:
+            for userId in bot.users_list:
+                current_status = await construct_presence_data(guild, userId)
+                if current_status and (userId not in PresenceData or PresenceData[userId] != current_status):
+                    PresenceData[userId] = current_status
+                    async with aiofiles.open(os.path.join(json_dir, f'{userId}.json'), mode='w', encoding='utf-8') as file:
+                        await file.write(json.dumps(current_status, ensure_ascii=False))
+                    if bot.send_alerts:
+                        await channel.send(f'Updated `{userId}` ```json\n{json.dumps(current_status, indent=4, ensure_ascii=False)}```')
 
 @app.route('/status/<int:user_id>', methods=['GET'])
 async def get_status(user_id):
