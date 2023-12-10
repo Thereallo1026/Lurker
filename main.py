@@ -243,14 +243,6 @@ def run_bot():
     bot.run(token)
 
 def run_flask():
-    app.run(port=5000, use_reloader=False)
-
-def run_bot():
-    load_dotenv()
-    token = os.getenv('TOKEN')
-    bot.run(token)
-
-def run_flask():
     app.run(port=1337, use_reloader=False, host="0.0.0.0")
 
 if __name__ == "__main__":
