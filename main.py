@@ -42,6 +42,18 @@ async def add(ctx, user_id: int):
         await ctx.send(f'User ID `{user_id}` is already in the list.')
 
 @bot.command()
+@commands.is_owner()
+async def remove(ctx, user_id: int):
+    if user_id in bot.users_list:
+        bot.users_list.remove(user_id)
+        async with aiofiles.open('./list.json', 'w') as file:
+            await file.write(json.dumps(bot.users_list))
+        await ctx.send(f'User ID `{user_id}` removed.')
+    else:
+        await ctx.send(f'User ID `{user_id}` is not in the list.')
+
+
+@bot.command()
 async def list(ctx):
     await ctx.send(f'```json\n{json.dumps(bot.users_list, indent=4, ensure_ascii=False)}```')
 
