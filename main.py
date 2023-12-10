@@ -1,4 +1,5 @@
 import os
+import io
 import json
 import discord
 import aiofiles
@@ -71,6 +72,31 @@ async def channel(ctx, id):
     except Exception as e:
         await ctx.send(f'Error updating configuration: {e}')
 
+@bot.command()
+@commands.is_owner()
+async def alerts(ctx, value):
+    if value.lower() == 'true':
+        alerts_value = True
+    elif value.lower() == 'false':
+        alerts_value = False
+    else:
+        await ctx.send(f'Invalid value for alerts: `{value}`. Please use "true" or "false".')
+        return
+
+    try:
+        async with aiofiles.open('./config.json', 'r') as file:
+            config = json.loads(await file.read())
+    except Exception as e:
+        await ctx.send(f'Error loading configuration: {e}')
+        return
+
+    config['alerts'] = alerts_value
+    try:
+        async with aiofiles.open('./config.json', 'w') as file:
+            await file.write(json.dumps(config))
+        await ctx.send(f'Updated alerts to `{alerts_value}`')
+    except Exception as e:
+        await ctx.send(f'Error updating configuration: {e}')
 
 PresenceData = {}
 async def getActivity(member):
@@ -128,21 +154,37 @@ async def construct_presence_data(guild, userId):
     def datetime_to_timestamp(dt):
         return int(dt.timestamp()) if isinstance(dt, datetime.datetime) else None
 
-    current_status = {
-        "name": member.name,
-        "id": member.id,
-        "status": str(member.status) if member.status else None,
-        'customStatus': str(member.activity) if member.activity else None,
-        "activity": await getActivity(member) if member.activities else None,
-    }
+    current_status = {}
+    if member.name is not None:
+        current_status["name"] = member.name
+    if member.id is not None:
+        current_status["id"] = member.id
+    if member.status is not None:
+        current_status["status"] = str(member.status)
 
-    if "activity" in current_status and current_status["activity"]:
+    if member.activity and isinstance(member.activity, discord.CustomActivity):
+        emoji = str(member.activity.emoji) if member.activity.emoji else None
+        message = member.activity.name if member.activity.name else None
+        if emoji or message:
+            current_status['customStatus'] = {"emoji": emoji, "message": message}
+
+    activities = await getActivity(member)
+    if activities and activities != [{"type": "None"}]:
+        current_status["activity"] = activities
+
+    if "activity" in current_status:
         for activity in current_status["activity"]:
             if "timestamps" in activity:
-                if "start" in activity["timestamps"] and isinstance(activity["timestamps"]["start"], datetime.datetime):
-                    activity["timestamps"]["start"] = datetime_to_timestamp(activity["timestamps"]["start"])
-                if "end" in activity["timestamps"] and isinstance(activity["timestamps"]["end"], datetime.datetime):
-                    activity["timestamps"]["end"] = datetime_to_timestamp(activity["timestamps"]["end"])
+                start = activity["timestamps"].get("start")
+                end = activity["timestamps"].get("end")
+                if isinstance(start, datetime.datetime):
+                    activity["timestamps"]["start"] = datetime_to_timestamp(start)
+                else:
+                    activity["timestamps"].pop("start", None)
+                if isinstance(end, datetime.datetime):
+                    activity["timestamps"]["end"] = datetime_to_timestamp(end)
+                else:
+                    activity["timestamps"].pop("end", None)
 
     return current_status
 
@@ -163,7 +205,15 @@ async def check_presence():
                     async with aiofiles.open(os.path.join(json_dir, f'{userId}.json'), mode='w', encoding='utf-8') as file:
                         await file.write(json.dumps(current_status, ensure_ascii=False))
                     if bot.send_alerts:
-                        await channel.send(f'Updated `{userId}` ```json\n{json.dumps(current_status, indent=4, ensure_ascii=False)}```')
+                        status_json = json.dumps(current_status, indent=4, ensure_ascii=False)
+                        if len(status_json) > 1500:
+                            # file
+                            with io.BytesIO(status_json.encode('utf-8')) as f:
+                                await channel.send(f"Updated `{userId}`:", file=discord.File(f, f'{userId}_status.json'))
+                        else:
+                            # message
+                            await channel.send(f'Updated `{userId}` ```json\n{status_json}```')
+
 
 @app.route('/status/<int:user_id>', methods=['GET'])
 async def get_status(user_id):
