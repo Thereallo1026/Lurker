@@ -33,10 +33,11 @@ async def on_ready():
 @bot.command()
 @commands.is_owner()
 async def add(ctx, user_id: int):
-    if user_id not in bot.users_list:
-        bot.users_list.append(user_id)
-        async with aiofiles.open('./list.json', 'w') as file:
-            await file.write(json.dumps(bot.users_list))
+    bot.config = await load_config()
+    if user_id not in bot.config["list"]:
+        bot.config["list"].append(user_id)
+        async with aiofiles.open('./config.json', 'w') as file:
+            await file.write(json.dumps(bot.config))
         await ctx.send(f'User ID `{user_id}` added.')
     else:
         await ctx.send(f'User ID `{user_id}` is already in the list.')
@@ -44,14 +45,14 @@ async def add(ctx, user_id: int):
 @bot.command()
 @commands.is_owner()
 async def remove(ctx, user_id: int):
-    if user_id in bot.users_list:
-        bot.users_list.remove(user_id)
-        async with aiofiles.open('./list.json', 'w') as file:
-            await file.write(json.dumps(bot.users_list))
+    bot.config = await load_config()
+    if user_id in bot.config["list"]:
+        bot.config["list"].remove(user_id)
+        async with aiofiles.open('./config.json', 'w') as file:
+            await file.write(json.dumps(bot.config))
         await ctx.send(f'User ID `{user_id}` removed.')
     else:
         await ctx.send(f'User ID `{user_id}` is not in the list.')
-
 
 @bot.command()
 async def list(ctx):
