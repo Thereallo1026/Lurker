@@ -3,6 +3,7 @@ import io
 import json
 import discord
 import aiofiles
+import aiohttp
 import datetime
 
 from multiprocessing import Process
@@ -29,6 +30,7 @@ async def load_config():
 async def on_ready():
     print(f'Logged in as {bot.user.name}')
     check_presence.start()
+    check_arc_beta.start()
 
 @bot.command()
 @commands.is_owner()
@@ -84,6 +86,12 @@ async def channel(ctx, id):
         await ctx.send(f'Updated alerts channel to `{id}`')
     except Exception as e:
         await ctx.send(f'Error updating configuration: {e}')
+
+@bot.command()
+@commands.is_owner()
+async def arc(ctx):
+    value = await fetch_arc_beta()
+    await ctx.send(value[0])
 
 @bot.command()
 @commands.is_owner()
@@ -227,6 +235,62 @@ async def check_presence():
                             # message
                             await channel.send(f'Updated `{userId}` ```json\n{status_json}```')
 
+CONFIG_FILE = './config.json'
+ARC_BETA_KEY = 'arcBeta'
+
+async def fetch_arc_beta():
+    url = "https://api.retool.com/v1/workflows/629ac40b-46c2-4cb5-8d16-ee9d482781e0/startTrigger?workflowApiKey=retool_wk_ad878a1e91ad47c3bd1f754c426da0cf"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                json_data = await response.json()
+                print(json_data)
+                return json_data.get("betaTesters"), json_data
+            else:
+                print(f"Failed to fetch data: {response.status}")
+                return None
+
+def save_to_config(key, value):
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+    else:
+        config = {}
+
+    config[key] = value
+
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f)
+
+def load_from_config(key):
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+            return config.get(key)
+    return None
+
+@tasks.loop(seconds=30)
+async def check_arc_beta():
+    old_beta = load_from_config(ARC_BETA_KEY)
+    new_beta = await fetch_arc_beta()
+
+    if new_beta[0] is not None and new_beta[0] != old_beta:
+        diff = new_beta[0] - (old_beta if old_beta is not None else 0)
+        diff_sign = "+" if diff >= 0 else ""
+        embed = discord.Embed(title="Arc Windows Beta", color=0x3139fb)
+        embed.set_thumbnail(url="https://framerusercontent.com/images/Fcy9YNKBYDx1Vj7UYJygYk6PCo.png?scale-down-to=512")
+        embed.add_field(name="Raw", value=f"```json\n{new_beta[1]}\n```", inline=False)
+        embed.add_field(name="Difference", value=f"```diff\n{diff_sign}{diff}\n```", inline=True)
+        embed.add_field(name="Overall", value=f"```{str(new_beta[0])}```", inline=True)
+
+        guild = bot.get_guild(1131126447340261398)
+        if guild:
+            channel = guild.get_channel(1186409119847022703)
+            if channel:
+                await channel.send(embed=embed)
+        
+        save_to_config(ARC_BETA_KEY, new_beta[0])
 
 @app.route('/status/<int:user_id>', methods=['GET'])
 async def get_status(user_id):
