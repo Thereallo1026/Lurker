@@ -240,16 +240,32 @@ ARC_BETA_KEY = 'arcBeta'
 
 async def fetch_arc_beta():
     url = "https://api.retool.com/v1/workflows/629ac40b-46c2-4cb5-8d16-ee9d482781e0/startTrigger?workflowApiKey=retool_wk_ad878a1e91ad47c3bd1f754c426da0cf"
+    guild_id = 1131126447340261398
+    channel_id = 1186409119847022703
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                json_data = await response.json()
-                print(json_data)
-                return json_data.get("betaTesters"), json_data
-            else:
-                print(f"Failed to fetch data: {response.status}")
-                return None
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    json_data = await response.json()
+                    print(json_data)
+                    return json_data.get("betaTesters"), json_data
+                else:
+                    print(f"Failed to fetch data: {response.status}")
+                    return None
+    except Exception as e:
+        error_message = f"Failed to fetch data: {e}"
+        print(error_message)
+        await send_error_message(guild_id, channel_id, error_message)
+        return None
+
+async def send_error_message(guild_id, channel_id, error_message):
+    guild = bot.get_guild(guild_id)
+    if guild:
+        channel = guild.get_channel(channel_id)
+        if channel:
+            await channel.send(f"Error in `fetch_arc_beta`: {error_message}")
+
 
 def save_to_config(key, value):
     if os.path.exists(CONFIG_FILE):
