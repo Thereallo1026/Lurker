@@ -305,11 +305,11 @@ async def check_arc_beta():
     embed.set_thumbnail(url="https://framerusercontent.com/images/Fcy9YNKBYDx1Vj7UYJygYk6PCo.png?scale-down-to=512")
     embed.set_footer(text=f"Last updated: {timestamp}")
     embed.add_field(name="Raw", value=f"```json\n{raw}\n```", inline=False)
-    embed.add_field(name="Difference", value=f"```diff\n{diff_sign}{diff}\n```", inline=True)
+    embed.add_field(name="Diff", value=f"```diff\n{diff_sign}{diff}\n```", inline=True)
     embed.add_field(name="Overall", value=f"```{str(new_beta)}```", inline=True)
 
     if diff > 1:
-        ping_message = f"<@454920881177624576> they added more goofy beta testers (but probably not you)"
+        ping_message = f"<@454920881177624576> `{diff_sign}{diff}` more goofy beta testers (but probably not you)"
         await channel.send(ping_message, embed=embed)
     elif arc_beta_msg_id:
         try:
