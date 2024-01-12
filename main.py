@@ -10,6 +10,7 @@ from multiprocessing import Process
 from dotenv import load_dotenv
 from discord.ext import commands, tasks
 from flask import Flask, jsonify
+import pytz
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 app = Flask(__name__)
@@ -29,8 +30,8 @@ async def load_config():
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name}')
-    check_presence.start()
     check_arc_beta.start()
+    check_presence.start()
 
 @bot.command()
 @commands.is_owner()
@@ -240,23 +241,20 @@ ARC_BETA_KEY = 'arcBeta'
 
 async def fetch_arc_beta():
     url = "https://api.retool.com/v1/workflows/629ac40b-46c2-4cb5-8d16-ee9d482781e0/startTrigger?workflowApiKey=retool_wk_ad878a1e91ad47c3bd1f754c426da0cf"
-    guild_id = 1131126447340261398
-    channel_id = 1186409119847022703
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
+                resp = await response.text()
+                print(f"{datetime.datetime.now()} {response.status}: {resp}")
                 if response.status == 200:
                     json_data = await response.json()
-                    print(json_data)
                     return json_data.get("betaTesters"), json_data
                 else:
                     print(f"Failed to fetch data: {response.status}")
                     return None
     except Exception as e:
-        error_message = f"Failed to fetch data: {e}"
-        print(error_message)
-        await send_error_message(guild_id, channel_id, error_message)
+        print(f"Failed to fetch data: {e}")
         return None
 
 async def send_error_message(guild_id, channel_id, error_message):
@@ -286,27 +284,45 @@ def load_from_config(key):
             return config.get(key)
     return None
 
-@tasks.loop(seconds=30)
+arc_beta_msg_id = None
+
+@tasks.loop(seconds=60)
 async def check_arc_beta():
+    global arc_beta_msg_id
     old_beta = load_from_config(ARC_BETA_KEY)
-    new_beta = await fetch_arc_beta()
+    new_beta_result = await fetch_arc_beta()
+    new_beta = new_beta_result[0]
+    raw = new_beta_result[1]
 
-    if new_beta[0] is not None and new_beta[0] != old_beta:
-        diff = new_beta[0] - (old_beta if old_beta is not None else 0)
-        diff_sign = "+" if diff >= 0 else ""
-        embed = discord.Embed(title="Arc Windows Beta", color=0x3139fb)
-        embed.set_thumbnail(url="https://framerusercontent.com/images/Fcy9YNKBYDx1Vj7UYJygYk6PCo.png?scale-down-to=512")
-        embed.add_field(name="Raw", value=f"```json\n{new_beta[1]}\n```", inline=False)
-        embed.add_field(name="Difference", value=f"```diff\n{diff_sign}{diff}\n```", inline=True)
-        embed.add_field(name="Overall", value=f"```{str(new_beta[0])}```", inline=True)
+    guild = bot.get_guild(1131126447340261398)
+    channel = guild.get_channel(1195470811226722465)
 
-        guild = bot.get_guild(1131126447340261398)
-        if guild:
-            channel = guild.get_channel(1186409119847022703)
-            if channel:
-                await channel.send(embed=embed)
-        
-        save_to_config(ARC_BETA_KEY, new_beta[0])
+    timestamp = datetime.datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d %H:%M:%S")
+    diff = new_beta - (old_beta if old_beta is not None else 0)
+    diff_sign = "+" if diff >= 0 else ""
+
+    embed = discord.Embed(title="Arc Windows Beta", color=0x3139fb)
+    embed.set_thumbnail(url="https://framerusercontent.com/images/Fcy9YNKBYDx1Vj7UYJygYk6PCo.png?scale-down-to=512")
+    embed.set_footer(text=f"Last updated: {timestamp}")
+    embed.add_field(name="Raw", value=f"```json\n{raw}\n```", inline=False)
+    embed.add_field(name="Difference", value=f"```diff\n{diff_sign}{diff}\n```", inline=True)
+    embed.add_field(name="Overall", value=f"```{str(new_beta)}```", inline=True)
+
+    if diff > 1:
+        ping_message = f"<@454920881177624576> they added more goofy beta testers (but probably not you)"
+        await channel.send(ping_message, embed=embed)
+    elif arc_beta_msg_id:
+        try:
+            message = await channel.fetch_message(arc_beta_msg_id)
+            await message.edit(embed=embed)
+        except discord.NotFound:
+            message = await channel.send(embed=embed)
+            arc_beta_msg_id = message.id
+    else:
+        message = await channel.send(embed=embed)
+        arc_beta_msg_id = message.id
+
+    save_to_config(ARC_BETA_KEY, new_beta)
 
 @app.route('/status/<int:user_id>', methods=['GET'])
 async def get_status(user_id):
