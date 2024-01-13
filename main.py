@@ -309,8 +309,7 @@ async def check_arc_beta():
     embed.add_field(name="Overall", value=f"```{str(new_beta)}```", inline=True)
 
     if diff > 1:
-        ping_message = f"<@454920881177624576> `{diff_sign}{diff}` more goofy beta testers (but probably not you)"
-        await channel.send(ping_message, embed=embed)
+        await channel.send(f"<@454920881177624576> | `{timestamp}` | `{diff_sign}{diff}` new beta testers has been added.")
     elif arc_beta_msg_id:
         try:
             message = await channel.fetch_message(arc_beta_msg_id)
